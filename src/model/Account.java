@@ -5,7 +5,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class Account {
     private final String accountId;
     private double balance;
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock.ReadLock  readLock  = rwLock.readLock();
+    private final ReentrantReadWriteLock.WriteLock writeLock = rwLock.writeLock();
 
     public Account(String accountId, double initialBalance) {
         this.accountId = accountId;
@@ -16,27 +19,27 @@ public class Account {
 
     // Read lock — multiple threads can read simultaneously
     public double getBalance() {
-        lock.readLock().lock();
+        readLock.lock();
         try {
             return balance;
         } finally {
-            lock.readLock().unlock();
+            readLock.unlock();
         }
     }
 
     // Write lock — exclusive access for mutations
     public void deposit(double amount) {
-        lock.writeLock().lock();
+        writeLock.lock();
         try {
             balance += amount;
             notifyAll(); // wake threads waiting for funds
         } finally {
-            lock.writeLock().unlock();
+            writeLock.unlock();
         }
     }
 
     public boolean withdraw(double amount) {
-        lock.writeLock().lock();
+        writeLock.lock();
         try {
             if (balance >= amount) {
                 balance -= amount;
@@ -44,14 +47,12 @@ public class Account {
             }
             return false;
         } finally {
-            lock.writeLock().unlock();
+            writeLock.unlock();
         }
     }
 
-    public ReentrantReadWriteLock getLock() { return lock; }
-
     @Override
     public String toString() {
-        return "Account[" + accountId + ", balance=" + getBalance() + "]";
+        return "Account[" + accountId + ", ₹" + getBalance() + "]";
     }
 }

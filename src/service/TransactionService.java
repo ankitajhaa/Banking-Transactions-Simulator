@@ -9,10 +9,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class TransactionService {
 
-    private final ConcurrentHashMap<String, Account> accounts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Account> accounts        = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Transaction> transactionLog = new ConcurrentHashMap<>();
 
-    private static final long WAIT_TIMEOUT_MS = 3000; // 3 seconds
+    private static final long WAIT_TIMEOUT_MS = 3000;
 
     public void addAccount(Account account) {
         accounts.put(account.getAccountId(), account);
@@ -31,27 +31,14 @@ public class TransactionService {
     public Transaction deposit(String accountId, double amount) {
         Transaction t = new Transaction(Type.DEPOSIT, amount);
 
-        // Input validation
-        if (amount <= 0) {
-            t.setStatus(Status.FAILED);
-            System.out.println("[INVALID] Deposit amount must be > 0");
-            logTransaction(t);
-            return t;
-        }
+        if (!validate(amount, accountId, t)) return t;
 
         Account account = accounts.get(accountId);
-        if (account == null) {
-            t.setStatus(Status.FAILED);
-            System.out.println("[INVALID] Account not found: " + accountId);
-            logTransaction(t);
-            return t;
-        }
 
-        // Synchronized block for wait/notify (covered fully in Checkpoint 4)
         synchronized (account) {
             account.deposit(amount);
             t.setStatus(Status.SUCCESS);
-            account.notifyAll(); // wake any threads waiting for funds
+            account.notifyAll(); // ← wake ALL threads waiting for funds on this account
         }
 
         logTransaction(t);
@@ -62,46 +49,45 @@ public class TransactionService {
     public Transaction withdraw(String accountId, double amount) {
         Transaction t = new Transaction(Type.WITHDRAW, amount);
 
-        // Input validation
-        if (amount <= 0) {
-            t.setStatus(Status.FAILED);
-            System.out.println("[INVALID] Withdrawal amount must be > 0");
-            logTransaction(t);
-            return t;
-        }
+        if (!validate(amount, accountId, t)) return t;
 
         Account account = accounts.get(accountId);
-        if (account == null) {
-            t.setStatus(Status.FAILED);
-            System.out.println("[INVALID] Account not found: " + accountId);
-            logTransaction(t);
-            return t;
-        }
 
         synchronized (account) {
             long deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MS;
 
-            // Wait if insufficient funds (with timeout)
+            // Loop — MUST re-check condition after every wait() call
+            // because notifyAll() can wake spuriously or for other reasons
             while (account.getBalance() < amount) {
                 long remaining = deadline - System.currentTimeMillis();
+
                 if (remaining <= 0) {
+                    // Timeout — give up
                     t.setStatus(Status.TIMEOUT);
-                    System.out.println("[TIMEOUT] Insufficient funds for withdrawal of ₹" + amount
-                            + " | Balance: ₹" + account.getBalance());
+                    System.out.println("[TIMEOUT] ₹" + amount
+                            + " withdrawal failed | Balance: ₹" + account.getBalance());
                     logTransaction(t);
                     return t;
                 }
+
                 try {
-                    account.wait(remaining);
+                    System.out.println(Thread.currentThread().getName()
+                            + " | Waiting for funds... need ₹" + amount
+                            + ", have ₹" + account.getBalance()
+                            + " (timeout in " + remaining + "ms)");
+
+                    account.wait(remaining); // releases lock, sleeps, re-acquires on wake
+
                 } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                    Thread.currentThread().interrupt(); // restore interrupt flag
                     t.setStatus(Status.FAILED);
+                    System.out.println("[INTERRUPTED] Withdrawal of ₹" + amount + " interrupted");
                     logTransaction(t);
                     return t;
                 }
             }
 
-            // Funds available — proceed
+            // Sufficient funds confirmed inside synchronized block
             account.withdraw(amount);
             t.setStatus(Status.SUCCESS);
         }
@@ -114,14 +100,12 @@ public class TransactionService {
     public Transaction transfer(String fromId, String toId, double amount) {
         Transaction t = new Transaction(Type.TRANSFER, amount);
 
-        // Input validation
         if (amount <= 0) {
             t.setStatus(Status.FAILED);
             System.out.println("[INVALID] Transfer amount must be > 0");
             logTransaction(t);
             return t;
         }
-
         if (fromId.equals(toId)) {
             t.setStatus(Status.FAILED);
             System.out.println("[INVALID] Cannot transfer to same account");
@@ -139,7 +123,7 @@ public class TransactionService {
             return t;
         }
 
-        // Deadlock prevention — always lock in consistent order by accountId
+        // Deadlock prevention — consistent lock ordering by accountId
         Account first  = fromId.compareTo(toId) < 0 ? from : to;
         Account second = fromId.compareTo(toId) < 0 ? to   : from;
 
@@ -147,20 +131,39 @@ public class TransactionService {
             synchronized (second) {
                 if (from.getBalance() < amount) {
                     t.setStatus(Status.FAILED);
-                    System.out.println("[FAILED] Insufficient funds for transfer of ₹" + amount
-                            + " | Balance: ₹" + from.getBalance());
+                    System.out.println("[FAILED] Insufficient funds for transfer | Balance: ₹"
+                            + from.getBalance());
                     logTransaction(t);
                     return t;
                 }
-
                 from.withdraw(amount);
                 to.deposit(amount);
                 t.setStatus(Status.SUCCESS);
+
+                // Notify anyone waiting on the destination account
+                to.notifyAll();
             }
         }
 
         logTransaction(t);
         return t;
+    }
+
+    // ── SHARED VALIDATION ─────────────────────────────────────
+    private boolean validate(double amount, String accountId, Transaction t) {
+        if (amount <= 0) {
+            t.setStatus(Status.FAILED);
+            System.out.println("[INVALID] Amount must be > 0");
+            logTransaction(t);
+            return false;
+        }
+        if (!accounts.containsKey(accountId)) {
+            t.setStatus(Status.FAILED);
+            System.out.println("[INVALID] Account not found: " + accountId);
+            logTransaction(t);
+            return false;
+        }
+        return true;
     }
 
     public ConcurrentHashMap<String, Transaction> getTransactionLog() {
