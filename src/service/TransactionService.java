@@ -9,6 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class TransactionService {
 
+    private boolean silent = false;
+
     private final ConcurrentHashMap<String, Account> accounts        = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Transaction> transactionLog = new ConcurrentHashMap<>();
 
@@ -24,7 +26,9 @@ public class TransactionService {
 
     public void logTransaction(Transaction t) {
         transactionLog.put(t.getTransactionId(), t);
-        System.out.println(Thread.currentThread().getName() + " → " + t);
+        if (!silent) {
+            System.out.println(Thread.currentThread().getName() + " → " + t);
+        }
     }
 
     // ── DEPOSIT ──────────────────────────────────────────────
@@ -168,5 +172,9 @@ public class TransactionService {
 
     public ConcurrentHashMap<String, Transaction> getTransactionLog() {
         return transactionLog;
+    }
+
+    public void setSilent(boolean silent) {
+        this.silent = silent;
     }
 }

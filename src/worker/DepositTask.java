@@ -19,8 +19,6 @@ public class DepositTask implements Callable<Transaction> {
 
     @Override
     public Transaction call() {
-        System.out.println(Thread.currentThread().getName()
-                + " | Depositing ₹" + amount + " → " + accountId);
         return service.deposit(accountId, amount);
     }
 }

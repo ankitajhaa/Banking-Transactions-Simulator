@@ -19,8 +19,6 @@ public class WithdrawTask implements Callable<Transaction> {
 
     @Override
     public Transaction call() {
-        System.out.println(Thread.currentThread().getName()
-                + " | Withdrawing ₹" + amount + " from " + accountId);
         return service.withdraw(accountId, amount);
     }
 }
