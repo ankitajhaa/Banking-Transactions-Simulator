@@ -17,7 +17,6 @@ public class Account {
 
     public String getAccountId() { return accountId; }
 
-    // Read lock — multiple threads can read simultaneously
     public double getBalance() {
         readLock.lock();
         try {
@@ -27,12 +26,11 @@ public class Account {
         }
     }
 
-    // Write lock — exclusive access for mutations
     public void deposit(double amount) {
         writeLock.lock();
         try {
             balance += amount;
-            notifyAll(); // wake threads waiting for funds
+            notifyAll(); 
         } finally {
             writeLock.unlock();
         }

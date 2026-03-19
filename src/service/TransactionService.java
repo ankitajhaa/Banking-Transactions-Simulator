@@ -31,7 +31,6 @@ public class TransactionService {
         }
     }
 
-    // ── DEPOSIT ──────────────────────────────────────────────
     public Transaction deposit(String accountId, double amount) {
         Transaction t = new Transaction(Type.DEPOSIT, amount);
 
@@ -42,14 +41,13 @@ public class TransactionService {
         synchronized (account) {
             account.deposit(amount);
             t.setStatus(Status.SUCCESS);
-            account.notifyAll(); // ← wake ALL threads waiting for funds on this account
+            account.notifyAll(); 
         }
 
         logTransaction(t);
         return t;
     }
 
-    // ── WITHDRAW ─────────────────────────────────────────────
     public Transaction withdraw(String accountId, double amount) {
         Transaction t = new Transaction(Type.WITHDRAW, amount);
 
@@ -60,13 +58,10 @@ public class TransactionService {
         synchronized (account) {
             long deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MS;
 
-            // Loop — MUST re-check condition after every wait() call
-            // because notifyAll() can wake spuriously or for other reasons
             while (account.getBalance() < amount) {
                 long remaining = deadline - System.currentTimeMillis();
 
                 if (remaining <= 0) {
-                    // Timeout — give up
                     t.setStatus(Status.TIMEOUT);
                     System.out.println("[TIMEOUT] ₹" + amount
                             + " withdrawal failed | Balance: ₹" + account.getBalance());
@@ -80,10 +75,10 @@ public class TransactionService {
                             + ", have ₹" + account.getBalance()
                             + " (timeout in " + remaining + "ms)");
 
-                    account.wait(remaining); // releases lock, sleeps, re-acquires on wake
+                    account.wait(remaining);
 
                 } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt(); // restore interrupt flag
+                    Thread.currentThread().interrupt(); 
                     t.setStatus(Status.FAILED);
                     System.out.println("[INTERRUPTED] Withdrawal of ₹" + amount + " interrupted");
                     logTransaction(t);
@@ -91,7 +86,6 @@ public class TransactionService {
                 }
             }
 
-            // Sufficient funds confirmed inside synchronized block
             account.withdraw(amount);
             t.setStatus(Status.SUCCESS);
         }
@@ -127,7 +121,7 @@ public class TransactionService {
             return t;
         }
 
-        // Deadlock prevention — consistent lock ordering by accountId
+
         Account first  = fromId.compareTo(toId) < 0 ? from : to;
         Account second = fromId.compareTo(toId) < 0 ? to   : from;
 
@@ -144,7 +138,7 @@ public class TransactionService {
                 to.deposit(amount);
                 t.setStatus(Status.SUCCESS);
 
-                // Notify anyone waiting on the destination account
+
                 to.notifyAll();
             }
         }

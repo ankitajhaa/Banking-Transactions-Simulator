@@ -21,7 +21,6 @@ public class Transaction {
         this.status = Status.PENDING;
     }
 
-    // Getters
     public String getTransactionId() { return transactionId; }
     public Type getType()            { return type; }
     public double getAmount()        { return amount; }

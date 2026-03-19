@@ -67,7 +67,7 @@ public class FraudDetector implements Runnable {
     }
 
     private void checkRapidWithdrawals(Transaction t) {
-        // Use transactionId as proxy for accountId (real system would track per account)
+
         String key = "withdraw-monitor";
 
         withdrawalTracker.putIfAbsent(key, new ConcurrentLinkedQueue<>());
@@ -76,7 +76,6 @@ public class FraudDetector implements Runnable {
         long now = System.currentTimeMillis();
         timestamps.add(now);
 
-        // Remove timestamps outside the window
         timestamps.removeIf(ts -> now - ts > RAPID_WINDOW_MS);
 
         if (timestamps.size() >= RAPID_WITHDRAW_LIMIT) {
